@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard - Questionários</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --card2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #f472b6;
+    --ok: #22c55e;
+    --err: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at top, #1e293b, var(--bg));
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+  }
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 1.9rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  .status {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 1.1rem;
+  }
+  .status.error { color: var(--err); }
+  .spinner {
+    width: 42px; height: 42px;
+    border: 4px solid #334155;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto 14px;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  }
+  .kpi .label { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }
+  .kpi .value { font-size: 1.7rem; font-weight: 700; margin-top: 6px; color: var(--accent); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid #334155;
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  }
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 1.05rem;
+    color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card h2 span.dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); display: inline-block;
+  }
+  .chart-wrap { position: relative; height: 300px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+  }
+  th, td {
+    padding: 9px 10px;
+    text-align: left;
+    border-bottom: 1px solid #334155;
+  }
+  th {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: .72rem;
+    letter-spacing: .05em;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--accent); }
+  tbody tr:hover { background: var(--card2); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+  }
+  .b-facil { background: #14532d; color: #86efac; }
+  .b-medio { background: #713f12; color: #fde68a; }
+  .b-dificil { background: #7f1d1d; color: #fca5a5; }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .filters select, .filters input {
+    background: var(--card2);
+    border: 1px solid #334155;
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: .85rem;
+    outline: none;
+  }
+  .filters select:focus, .filters input:focus { border-color: var(--accent); }
+  .table-wrap { max-height: 380px; overflow: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dashboard de Questionários</h1>
+  <p>Dados carregados dinamicamente via Supabase REST API</p>
+</header>
+
+<div id="status" class="status">
+  <div class="spinner"></div>
+  Carregando dados...
+</div>
+
+<main id="content" style="display:none">
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="card">
+      <h2><span class="dot"></span>Questões por Podcast</h2>
+      <div class="chart-wrap"><canvas id="chartLinha"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:var(--accent2)"></span>Dificuldade</h2>
+      <div class="chart-wrap"><canvas id="chartSetor"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:#facc15"></span>Tempo por Tema</h2>
+      <div class="chart-wrap"><canvas id="chartTema"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:#22c55e"></span>Escolaridade</h2>
+      <div class="chart-wrap"><canvas id="chartEscolaridade"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:#a78bfa"></span>Questões por Dificuldade</h2>
+      <div class="chart-wrap"><canvas id="chartQuestoesDif"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:#fb923c"></span>Tempo Médio por Professor</h2>
+      <div class="chart-wrap"><canvas id="chartTempoProf"></canvas></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot" style="background:#a78bfa"></span>Comparações Detalhadas</h2>
+    <div class="filters">
+      <input type="text" id="filtroTexto" placeholder="Buscar professor, podcast ou tema..." />
+      <select id="filtroDificuldade">
+        <option value="">Todas as dificuldades</option>
+      </select>
+      <select id="filtroEscolaridade">
+        <option value="">Todas as escolaridades</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="professor">Professor</th>
+            <th data-key="podcast">Podcast</th>
+            <th data-key="escolaridade">Escolaridade</th>
+            <th data-key="questoes">Nº Questões</th>
+            <th data-key="dificuldade">Dificuldade</th>
+            <th data-key="tempo">Tempo (min)</th>
+            <th data-key="tema">Tema</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const URL = "https://ubihwbtubevuekpjvdli.supabase.co/rest/v1/vw_questionario?select=*";
+  const APIKEY = "sb_publishable_UtaUd8-N7UEKP2J4CVu6Kw_35mZDbbI";
+
+  const statusEl = document.getElementById("status");
+  const contentEl = document.getElementById("content");
+
+  let dadosOriginais = [];
+  let dadosFiltrados = [];
+  let sortKey = null, sortAsc = true;
+  const charts = {};
+
+  // ---------- Normalização (schema real) ----------
+  function normalizar(item, idx) {
+    const tempoSeg = Number(item.tempo) || 0;
+    return {
+      id: idx,
+      professor: item.professor ?? "—",
+      podcast: item.podcast ?? "—",
+      escolaridade: item.escolaridade_podcast ?? "Não informado",
+      questoes: Number(item.questoes) || 0,
+      dificuldade: item.dificuldade ?? "Não informado",
+      tempoSeg: tempoSeg,
+      tempoMin: +(tempoSeg / 60).toFixed(1),
+      tema: item.tema ?? "—"
+    };
+  }
+
+  // ---------- Fetch com tratamento ----------
+  async function carregar() {
+    try {
+      const res = await fetch(URL, {
+        method: "GET",
+        headers: { apikey: APIKEY }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Erro HTTP ${res.status} ${res.statusText || ""}`.trim());
+      }
+
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        mostrarStatus("📭 Nenhum questionário encontrado. A lista está vazia.", true);
+        return;
+      }
+
+      dadosOriginais = data.map(normalizar);
+      dadosFiltrados = [...dadosOriginais];
+
+      statusEl.style.display = "none";
+      contentEl.style.display = "block";
+
+      renderKPIs();
+      renderCharts();
+      renderFiltros();
+      renderTabela();
+    } catch (err) {
+      console.error(err);
+      mostrarStatus(`❌ Falha ao carregar: ${err.message}`, true);
+    }
+  }
+
+  function mostrarStatus(msg, isError) {
+    statusEl.className = "status" + (isError ? " error" : "");
+    statusEl.innerHTML = msg;
+    statusEl.style.display = "block";
+  }
+
+  // ---------- KPIs ----------
+  function renderKPIs() {
+    const total = dadosOriginais.length;
+    const somaQuestoes = dadosOriginais.reduce((s, d) => s + d.questoes, 0);
+    const mediaTempoMin = total ? (dadosOriginais.reduce((s, d) => s + d.tempoMin, 0) / total) : 0;
+    const professores = new Set(dadosOriginais.map(d => d.professor)).size;
+
+    const kpis = [
+      { label: "Questionários", value: total },
+      { label: "Total de Questões", value: somaQuestoes },
+      { label: "Média Tempo (min)", value: mediaTempoMin.toFixed(1) },
+      { label: "Professores", value: professores }
+    ];
+
+    document.getElementById("kpis").innerHTML = kpis.map(k => `
+      <div class="kpi">
+        <div class="label">${k.label}</div>
+        <div class="value">${k.value}</div>
+      </div>
+    `).join("");
+  }
+
+  // ---------- Agregações ----------
+  function agruparSoma(arr, chave, valorFn) {
+    const map = new Map();
+    for (const item of arr) map.set(item[chave], (map.get(item[chave]) || 0) + valorFn(item));
+    return map;
+  }
+  function agruparContagem(arr, chave) {
+    const map = new Map();
+    for (const item of arr) map.set(item[chave], (map.get(item[chave]) || 0) + 1);
+    return map;
+  }
+  function agruparMedia(arr, chave, valorFn) {
+    const soma = new Map(), cont = new Map();
+    for (const item of arr) {
+      const k = item[chave];
+      soma.set(k, (soma.get(k) || 0) + valorFn(item));
+      cont.set(k, (cont.get(k) || 0) + 1);
+    }
+    const out = new Map();
+    for (const [k, s] of soma) out.set(k, +(s / cont.get(k)).toFixed(1));
+    return out;
+  }
+
+  // ---------- Gráficos ----------
+  function renderCharts() {
+    const porPodcastQtd = agruparSoma(dadosOriginais, "podcast", d => d.questoes);
+    const porDificuldade = agruparContagem(dadosOriginais, "dificuldade");
+    const porTemaTempo = agruparSoma(dadosOriginais, "tema", d => d.tempoMin);
+    const porEscolaridade = agruparContagem(dadosOriginais, "escolaridade");
+    const questoesPorDif = agruparSoma(dadosOriginais, "dificuldade", d => d.questoes);
+    const tempoMedioProf = agruparMedia(dadosOriginais, "professor", d => d.tempoMin);
+
+    destruirCharts();
+
+    // Eixos padrão (para gráficos verticais)
+    const commonVertical = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#e2e8f0" } } },
+      scales: {
+        x: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
+        y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" }, beginAtZero: true }
+      }
+    };
+
+    // Eixos para gráficos horizontais (corrigido!)
+    const commonHorizontal = {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: "y", // Define a barra na horizontal
+      plugins: { legend: { display: false } }, // Oculta legenda (opcional)
+      scales: {
+        x: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" }, beginAtZero: true }, // Eixo X agora é o valor
+        y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } } // Eixo Y agora são as categorias
+      }
+    };
+
+    charts.linha = new Chart(document.getElementById("chartLinha"), {
+      type: "line",
+      data: {
+        labels: [...porPodcastQtd.keys()],
+        datasets: [{
+          label: "Questões",
+          data: [...porPodcastQtd.values()],
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56,189,248,.2)",
+          fill: true,
+          tension: 0.35,
+          pointBackgroundColor: "#38bdf8",
+          pointRadius: 5
+        }]
+      },
+      options: commonVertical
+    });
+
+    charts.setor = new Chart(document.getElementById("chartSetor"), {
+      type: "doughnut",
+      data: {
+        labels: [...porDificuldade.keys()],
+        datasets: [{
+          data: [...porDificuldade.values()],
+          backgroundColor: ["#22c55e", "#facc15", "#ef4444", "#a78bfa", "#38bdf8"],
+          borderColor: "#1e293b",
+          borderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { color: "#e2e8f0" } } }
+      }
+    });
+
+    charts.tema = new Chart(document.getElementById("chartTema"), {
+      type: "bar",
+      data: {
+        labels: [...porTemaTempo.keys()],
+        datasets: [{
+          label: "Tempo total (min)",
+          data: [...porTemaTempo.values()],
+          backgroundColor: "rgba(250,204,21,.75)",
+          borderColor: "#facc15",
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: commonHorizontal // <-- Usando a configuração correta
+    });
+
+    charts.escolaridade = new Chart(document.getElementById("chartEscolaridade"), {
+      type: "pie",
+      data: {
+        labels: [...porEscolaridade.keys()],
+        datasets: [{
+          data: [...porEscolaridade.values()],
+          backgroundColor: ["#38bdf8", "#f472b6", "#22c55e", "#facc15", "#a78bfa", "#fb923c"],
+          borderColor: "#1e293b",
+          borderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { color: "#e2e8f0" } } }
+      }
+    });
+
+    charts.questoesDif = new Chart(document.getElementById("chartQuestoesDif"), {
+      type: "bar",
+      data: {
+        labels: [...questoesPorDif.keys()],
+        datasets: [{
+          label: "Total de questões",
+          data: [...questoesPorDif.values()],
+          backgroundColor: ["#22c55e", "#facc15", "#ef4444", "#a78bfa"],
+          borderRadius: 6
+        }]
+      },
+      options: { ...commonVertical, plugins: { legend: { display: false } } }
+    });
+
+    charts.tempoProf = new Chart(document.getElementById("chartTempoProf"), {
+      type: "bar",
+      data: {
+        labels: [...tempoMedioProf.keys()],
+        datasets: [{
+          label: "Tempo médio (min)",
+          data: [...tempoMedioProf.values()],
+          backgroundColor: "rgba(251,146,60,.8)",
+          borderColor: "#fb923c",
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: commonHorizontal // <-- Usando a configuração correta
+    });
+  }
+
+  function destruirCharts() {
+    for (const k in charts) if (charts[k]) charts[k].destroy();
+  }
+
+  // ---------- Filtros ----------
+  function renderFiltros() {
+    const dificuldades = [...new Set(dadosOriginais.map(d => d.dificuldade))].sort();
+    const escolaridades = [...new Set(dadosOriginais.map(d => d.escolaridade))].sort();
+
+    const selDif = document.getElementById("filtroDificuldade");
+    const selEsc = document.getElementById("filtroEscolaridade");
+
+    selDif.innerHTML = '<option value="">Todas as dificuldades</option>' +
+      dificuldades.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
+    selEsc.innerHTML = '<option value="">Todas as escolaridades</option>' +
+      escolaridades.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join("");
+
+    document.getElementById("filtroTexto").addEventListener("input", aplicarFiltros);
+    selDif.addEventListener("change", aplicarFiltros);
+    selEsc.addEventListener("change", aplicarFiltros);
+  }
+
+  function aplicarFiltros() {
+    const texto = document.getElementById("filtroTexto").value.toLowerCase().trim();
+    const dif = document.getElementById("filtroDificuldade").value;
+    const esc = document.getElementById("filtroEscolaridade").value;
+
+    dadosFiltrados = dadosOriginais.filter(d => {
+      if (dif && d.dificuldade !== dif) return false;
+      if (esc && d.escolaridade !== esc) return false;
+      if (texto) {
+        const hay = `${d.professor} ${d.podcast} ${d.tema}`.toLowerCase();
+        if (!hay.includes(texto)) return false;
+      }
+      return true;
+    });
+    renderTabela();
+  }
+
+  // ---------- Tabela ----------
+  function classeDificuldade(d) {
+    const s = String(d).toLowerCase();
+    if (s.includes("fác") || s.includes("fac")) return "b-facil";
+    if (s.includes("méd") || s.includes("med")) return "b-medio";
+    if (s.includes("difíc") || s.includes("dific") || s.includes("dif")) return "b-dificil";
+    return "";
+  }
+
+  function renderTabela() {
+    const tbody = document.getElementById("tbody");
+    let lista = [...dadosFiltrados];
+
+    if (sortKey) {
+      lista.sort((a, b) => {
+        const va = a[sortKey], vb = b[sortKey];
+        if (typeof va === "number" && typeof vb === "number") return sortAsc ? va - vb : vb - va;
+        return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+      });
+    }
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">
+        Nenhum resultado para os filtros aplicados.
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(d => `
+      <tr>
+        <td>${escapeHtml(d.professor)}</td>
+        <td>${escapeHtml(d.podcast)}</td>
+        <td>${escapeHtml(d.escolaridade)}</td>
+        <td>${d.questoes}</td>
+        <td><span class="badge ${classeDificuldade(d.dificuldade)}">${escapeHtml(d.dificuldade)}</span></td>
+        <td>${d.tempoMin}</td>
+        <td>${escapeHtml(d.tema)}</td>
+      </tr>
+    `).join("");
+  }
+
+  document.querySelectorAll("th[data-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (sortKey === key) sortAsc = !sortAsc;
+      else { sortKey = key; sortAsc = true; }
+      renderTabela();
+    });
+  });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  carregar();
+})();
+</script>
+</body>
+</html>
